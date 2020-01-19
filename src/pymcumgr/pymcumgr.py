@@ -78,21 +78,18 @@ def main():
     #
     registerImageCommandArguments(subs)
     registerOSCommandArguments(subs)
-
+    subs.add_parser('version', help='Display the %(prog)s version number')
 
     args = parser.parse_args()
 
-    print(args)
-    # args = parse_connstring(args)
-    print(args)
-
-    #sys.exit(1)
-
-    # loop = GLib.MainLoop()
-    # timeout = CmdTimeout(args.timeout, loop)
+    #print(args)
 
     # handle static commmands here
-    if args.command == 'image':
+    if args.command == 'version':
+        from pymcumgr import __version__
+        print(__version__)
+        sys.exit(0)
+    elif args.command == 'image':
         if args.img_cmd == 'analyze':
             with open(args.file, 'rb') as f:
                 contents = f.read()
@@ -102,32 +99,13 @@ def main():
             sys.exit(0)
 
 
-
-    # class BTCommand(object):
-    #     def __init__(self, run, args=None):
-    #         self.run = run
-    #         self.args = args
-    #         self.ret = 0
-    #         self.timestamp = 0
-
-    #     def send(self):
-    #         pass
-
-
-    # command_list = [
-    #     (send_echo, 'OK'),
-    #     (send_image_list, ''),
-    #     (send_image_test, '')
-    # ]
-
-    #GLib.timeout_add_seconds(args.timeout, quit_loop, loop)
     transport = TransportBLE.fromCmdArgs(args)
 
     if args.command == 'image':
         if args.img_cmd == 'list':
-            # GLib.timeout_add_seconds(0, send_image_list, mcumgr_char, None, loop)
+
             rsp = transport.run(ImageList())
-            #GLib.timeout_add_seconds(0, send_command, mcumgr_char, loop, timeout, CmdImg.imageList)
+
             print('list returend')
             print(rsp)
             if rsp:
@@ -135,39 +113,38 @@ def main():
                     print('image:{} {}'.format(idx, str(sl)))
         elif args.img_cmd == 'confirm':
             rsp = transport.run(ImageConfirm())
-            #GLib.timeout_add_seconds(0, send_command, mcumgr_char, loop, timeout, CmdImg.imageList)
-            print('list returend')
-            print(rsp)
-            if rsp:
-                for idx, sl in enumerate(ImgDescription(rsp).slots):
-                    print('image:{} {}'.format(idx, str(sl)))
-            # GLib.timeout_add_seconds(0, send_image_confirm, mcumgr_char, None, loop)
-        elif args.img_cmd == 'test':
-            rsp = transport.run(ImageTest(args.hash))
-            #GLib.timeout_add_seconds(0, send_command, mcumgr_char, loop, timeout, CmdImg.imageList)
+
             print('list returend')
             print(rsp)
             if rsp:
                 for idx, sl in enumerate(ImgDescription(rsp).slots):
                     print('image:{} {}'.format(idx, str(sl)))
 
-            # GLib.timeout_add_seconds(0, send_image_test, mcumgr_char, img_hash, loop)
+        elif args.img_cmd == 'test':
+            rsp = transport.run(ImageTest(args.hash))
+
+            print('list returend')
+            print(rsp)
+            if rsp:
+                for idx, sl in enumerate(ImgDescription(rsp).slots):
+                    print('image:{} {}'.format(idx, str(sl)))
+
+
         elif args.img_cmd == 'upload':
-            #img_hash = 'b47ab3d5617e38ba978bd7ef0a56adf7ea340000611fe7223327c4849cd0a848'
 
             with open(args.file, 'rb') as f:
                 contents = f.read()
 
-            # upload_handler = UploadHandler(MCUBootImage(contents), mtu=252)
+            # TODO: don't know how to obtain MTU, set static for now
             rsp = transport.run(ImageUpload(MCUBootImage(contents), mtu=252))
-            #GLib.timeout_add_seconds(0, send_command, mcumgr_char, loop, timeout, CmdImg.imageList)
+
             print('upload returend')
             print(rsp)
             if rsp:
                 print('Done')
         elif args.img_cmd == 'erase':
             rsp = transport.run(ImageErase())
-            #GLib.timeout_add_seconds(0, send_command, mcumgr_char, loop, timeout, CmdImg.imageList)
+
             print('erase returend')
             if rsp:
                 print(rsp)

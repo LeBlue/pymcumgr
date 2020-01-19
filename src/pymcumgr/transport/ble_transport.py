@@ -10,13 +10,13 @@ import time
 
 GATT_MCUMGR = [
     {
-        "name": "mcumgr_service",
-        "uuid": "8D53DC1D-1DB7-4CD3-868B-8A527460AA84",
-        "chars": [
+        'name': 'mcumgr_service',
+        'uuid': '8D53DC1D-1DB7-4CD3-868B-8A527460AA84',
+        'chars': [
             {
-                "name": "mcumgr_char",
-                "uuid": "da2e7828-fbce-4e01-ae9e-261174997c48",
-                "form": FormatRaw
+                'name': 'mcumgr_char',
+                'uuid': 'da2e7828-fbce-4e01-ae9e-261174997c48',
+                'form': FormatRaw
             }
         ] ,
     }
@@ -54,11 +54,10 @@ class GattMcumgr(Gatt):
 # TODO does this work as method?
 def mcumgr_char_rsp(char, changed_vals, transport=None):
     try:
-        print(char, changed_vals)
-        print(transport)
-        # msg = changed_vals.value
-        #err = 1
-    #    last_fragm = transport.fragment
+        if transport.debug:
+            print(char, changed_vals)
+            print(transport)
+
         transport.timeout.reset()
 
         if transport.fragment:
@@ -76,11 +75,13 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
 
         # wait for more
         if not cmd_rsp.hdr:
-            print("No compleete hdr")
+            if transport.debug:
+                print('Transport: Incomplete complete header')
             return
         print(cmd_rsp.hdr)
         if (cmd_rsp.hdr.size + cmd_rsp.hdr.length) > len(transport.fragment):
-            print('Fragmented packet')
+            if transport.debug:
+                print('Transport: Fragmented packet')
             return
 
         pkt_data = transport.fragment
@@ -91,22 +92,23 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
         # check duplicates
         if pkt_seq > cmd_rsp.hdr.seq:
             #ignore for now, this resonse already timed out and we made a new request.
-            print('Got duplicate: ', str(cmd_rsp.hdr))
+            print('Transport: Got duplicate: ', str(cmd_rsp.hdr), file=sys.stderr)
             return
 
         transport.response = transport.request.parse_response(pkt_data)
 
         # got packet:
-        print('Received:', transport.response)
+        if transport.debug:
+            print('Transport: Received:', transport.response)
 
         next_msg = transport.request.message()
         if next_msg:
-
             cmd_enc = next_msg.encode(transport.seq)
             transport.timeout.reset()
             transport.gatt.mcumgr_service.mcumgr_char.write(cmd_enc)
         else:
             transport.loop.quit()
+
     except Exception as e:
         transport.response = e
         transport.loop.quit()
@@ -127,9 +129,9 @@ class TransportBLE(object):
         self.seq = 0
         self.response_decode_cb = None
         self.response = None
+        self.debug = False
 
     def run(self, request):
-        # self.response_decode_cb = response_decode_cb
         self.request = request
 
         if not self.gatt or not self.gatt.dev or not self.gatt.dev.connected():
@@ -159,25 +161,28 @@ class TransportBLE(object):
         try:
             hci = Adapter(self.adapter)
         except BluezError as e:
-            print(str(e))
+            print(str(e), file=sys.stderr)
             sys.exit(1)
 
         dev = None
         try:
             devs = hci.devices()
             for d in devs:
-                print(str(d))
+                if self.debug:
+                    print('Transport: Found device:', str(d))
                 if d.name.upper() == self.peer_id.upper():
                     dev = d
                     break
 
         except BluezError as e:
-            print(str(e))
+            print(str(e), file=sys.stderr)
             sys.exit(1)
 
         if not dev:
-            print('scanning')
+            if self.debug:
+                print('Transport: Scanning ..')
             hci.scan()
+            # TODO: wait for timeout parameter seconds
             time.sleep(3)
             hci.scan(enable=False)
 
@@ -189,11 +194,15 @@ class TransportBLE(object):
                         break
 
             except BluezError as e:
-                print(str(e))
+                print(str(e), file=sys.stderr)
                 sys.exit(1)
 
         if not dev:
-            print("dev not found nearby")
+            if self.peer_id:
+                print('Transport: device {} not found nearby'.format(self.peer_id))
+            else:
+                print('Transport: device not found nearby')
+
             sys.exit(1)
 
         try:
@@ -202,7 +211,8 @@ class TransportBLE(object):
             print(str(e))
             sys.exit(1)
 
-        print('connected')
+        if self.debug:
+            print('Transport: Connected')
 
         mcumgr = GattMcumgr(d)
         mcumgr_char = mcumgr.mcumgr_service.mcumgr_char
@@ -215,11 +225,13 @@ class TransportBLE(object):
     @staticmethod
     def fromCmdArgs(args):
         connstring = args.connstring
+        if not connstring:
+            raise ValueError('Missing --connstring option')
         cs_attr_l = connstring.split(',')
         for cs_attr in cs_attr_l:
             cs_attrs = cs_attr.split('=')
             if not len(cs_attrs) == 2:
-                raise ValueError('Connstring attributes must be key=value')
+                raise ValueError('--connstring attributes must be key=value, e.g. --connstring "peer_id=aa:bb:cc:dd:ee:ff"')
 
             n_connstring = {}
             if not cs_attrs[0] in TransportBLE._valid_cs_attrs:
@@ -232,7 +244,7 @@ class TransportBLE(object):
         return TransportBLE(**n_connstring)
 
     def __str__(self):
-        return 'peer_id={}'.format(self.peer_id)
+        return 'conntype=ble,peer_id={}'.format(self.peer_id)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, str(self))
