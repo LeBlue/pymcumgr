@@ -1,12 +1,5 @@
 
-from pytinycbor import CborEncoder, CborValue, CborType, CborError, CborParser, CborIndefiniteLength
-
-# def _print_bytes_hex(bytes_buf):
-#     h_b_l = []
-#     h_b = bytes_buf.hex()
-#     for id in range(0, len(bytes_buf)*2, 2):
-#         h_b_l.append(h_b[id:id+2])
-#     print(' '.join(h_b_l))
+from tinycbor import CborEncoder, CborDecoder, CborType, CborError
 
 def get_hex_str(b, width=32):
     h_b_l = []
@@ -29,15 +22,11 @@ def get_hex_str(b, width=32):
 
 def print_hex(b, width=16):
     h_b_l = []
-    #print(b)
-    #print(b.decode('ascii', errors='replace'))
     h_b = b.hex()
-    #print(h_b)
     lascii = list(map(lambda x: x if x.isprintable() and x !='�' else '.', b.decode('ascii', errors='replace')))
     for idx in range(0, len(b) * 2, width * 2):
         h_b_l = []
         addr = '{:08x}'.format(idx)
-        #print(h_b[idx:idx + (width * 2)])
         for id in range(idx, idx+(width * 2), 2):
             h_b_l.append(h_b[id:id+2])
         l = ' '.join(h_b_l)
@@ -62,7 +51,7 @@ class CborAttr(object):
     @staticmethod
     def encode(values):
         enc = CborEncoder()
-        enc.init(512)
+        #enc.init(512)
 
         if not isinstance(values, (dict, list)):
             raise ValueError('dict or list expected: ' + str(type(values)))
@@ -90,6 +79,7 @@ class CborAttr(object):
             #     length += (len(cont[b'\x00']) - 1)
 
             cont_enc = enc.encoder_create_map(length)
+            cont_enc = enc
             if _pr_debug:
                 # print(enc.bytes())
                 print(' '*indent, 'recursing map, len:', length)
@@ -127,6 +117,7 @@ class CborAttr(object):
         elif isinstance(cont, list):
             length = len(cont)
             cont_enc = enc.encoder_create_array(length)
+            cont_enc = enc
             if _pr_debug:
                 print(' '*indent, 'recursing array, len:', length)
                 print(' '*indent, '          array:', str(cont))
@@ -176,8 +167,10 @@ class CborAttr(object):
     @staticmethod
     def decode(data):
 
-        parser = CborParser()
-        it = parser.init(data)
+        #parser = CborParser()
+        #it = parser.init(data)
+        it = CborDecoder(data)
+        
         if it.at_end():
             if _pr_debug:
                 print("Empty")
@@ -225,6 +218,7 @@ class CborAttr(object):
                 if _pr_debug:
                     print(' '*indent, "len: ??")
             child = it.enter_container()
+            child = it
 
             while not child.at_end():
                 _type = child.get_type()
@@ -245,6 +239,7 @@ class CborAttr(object):
             if _pr_debug:
                 print(' '*indent, '] Leaving: ', str(child))
             it = child.leave_container()
+            it = child
         elif _type == CborType.Map:
             cont = {}
             key = None
@@ -257,6 +252,7 @@ class CborAttr(object):
                 if _pr_debug:
                     print(' '*indent, "len: ??")
             child = it.enter_container()
+            child = it
 
             while not child.at_end():
                 _type = child.get_type()
@@ -317,6 +313,7 @@ class CborAttr(object):
             if _pr_debug:
                 print(' '*indent, '} Leaving: ', str(child))
             it = child.leave_container()
+            it = child
         return cont
 
     @staticmethod
@@ -329,46 +326,3 @@ class CborAttr(object):
             print(' '*indent, "Val: ", str(val))
         return val
 
-    # @staticmethod
-    # def _decode_value(it, _type, indent):
-    #     if _pr_debug:
-    #         print(' '*indent,'Value type:', str(_type), bytes([_type.value]).hex())
-    #     if _type == CborType.Integer:
-    #         val = it.get_int64()    # can't fail
-    #     elif  _type == CborType.ByteString:
-    #         val = it.get_byte_string()
-    #         if it.is_length_known():
-    #             if _pr_debug:
-    #                 print(' '*indent, "len:", it.get_string_length())
-    #             assert it.get_string_length() == len(val), 'Decoded and expected length do not match'
-    #         else:
-    #             if _pr_debug:
-    #                 print(' '*indent, "len: ??")
-    #     elif  _type == CborType.TextString:
-    #         val = it.get_text_string()
-    #     elif  _type == CborType.Tag:
-    #         val = it.get_tag()      # can't fail
-    #     elif  _type == CborType.Simple:
-    #         val = it.get_simple_type()  # can't fail
-    #     elif  _type == CborType.Null:
-    #         val = None
-    #     elif  _type == CborType.Undefined:
-    #         val = None
-    #     elif  _type == CborType.Boolean:
-    #         val = it.get_boolean()      # can't fail
-    #     elif  _type == CborType.Double:
-    #         val = it.get_float()
-    #     elif  _type == CborType.Float:
-    #         val = it.get_double()
-    #     elif  _type == CborType.HalfFloat:
-    #         val = it.get_half_float()
-    #     elif  _type == CborType.Invalid:
-    #         val = None
-    #         assert False, ' '*indent + 'Invalid type'      # can't happen
-    #     else:
-    #         val = None
-    #         assert False, ' '*indent + 'Unknown type'     # can't happen
-
-    #     if _pr_debug:
-    #         print(' '*indent, "Val: ", str(val))
-    #     return val
