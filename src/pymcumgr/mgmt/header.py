@@ -1,5 +1,7 @@
 
 from enum import Enum
+import sys
+
 '''
 /** Opcodes; encoded in first byte of header. */
 #define MGMT_OP_READ            0
@@ -160,25 +162,48 @@ class MgmtHeader(object):
 from .cborattr import CborAttr
 
 class RequestBase(object):
+    '''object keeps state of request'''
+
+    _debug = False
+
+    @classmethod
+    def set_debug(cls, enable):
+        cls._debug = enable
+
     def __init__(self):
         self.response_data = None
 
     def response_header(self, rsp):
+        '''
+        return parsed header object for length/partial packet detection
+        '''
         return CmdBase.decode_header(rsp)
 
     def parse_response(self, rsp):
+        '''
+        parameter rsp, bytes of response
+        tracks current state of request,
+        return parsed response data as dict or custom object
+        '''
         raise NotImplementedError('Must be provided by subclass')
 
     def message(self):
+        '''
+        return the current request message of CmdBase subtype, or None if request is already completed
+        '''
         raise NotImplementedError('Must be provided by subclass')
 
 class CmdBase(object):
 
     _group = None
+    _debug = False
+
+    @classmethod
+    def set_debug(cls, enable):
+        cls._debug = enable
 
     def __init__(self, hdr, payload_dict=None, payload_bytes=None, response_cb=None):
         self.hdr = hdr
-        #self.size = MgmtHeader.size
         self.payload_dict = payload_dict
         if payload_bytes is not None:
             if len(payload_bytes) > hdr.length:
@@ -191,6 +216,9 @@ class CmdBase(object):
         self.response_cb = response_cb
 
     def encode(self, seq=0):
+        '''encodes self.payload_dict and header
+        returns both as bytes
+        '''
         self.payload_bytes = CborAttr.encode(self.payload_dict)
 
         self.hdr.seq = seq
@@ -207,20 +235,22 @@ class CmdBase(object):
 
     @classmethod
     def decode_header(cls, rsp):
-        print('decode common: ', rsp)
+        if cls._debug:
+            print('Decode common: ', rsp)
+
         if len(rsp) < MgmtHeader.size:
             return cls(None)
         try:
             hdr = MgmtHeader.decode(rsp)
         except Exception as e:
-            print('dcode common header failed')
-            raise ValueError('Invalid Header: '.format(str(e)))
+            print('Decode common header failed', file=sys.stderr)
+            raise ValueError('Invalid Header: {}'.format(str(e)))
 
         if len(rsp[hdr.size:]) < hdr.length:
             return cls(hdr)
 
         if hdr.op != MgmtOp.WRITE_RSP and hdr.op != MgmtOp.READ_RSP:
-            raise ValueError('Not a response: ', MgmtOp(hdr.op))
+            raise ValueError('Not a response: {}'.format(str(MgmtOp(hdr.op))))
 
         return cls(hdr, payload_bytes=rsp[hdr.size:])
 
@@ -228,19 +258,3 @@ class CmdBase(object):
     def __str__(self):
         return '{} {}'.format(str(self.hdr), str(self.payload_dict))
 
-
-# def _get_hex_str(b, width=32):
-#     h_b_l = []
-#     h_b = b.hex()
-#     lascii = list(map(lambda x: x if x.isprintable() and x !='�' else '.', b.decode('ascii', errors='replace')))
-#     lines = []
-#     for idx in range(0, len(b), width):
-#         h_b_l = []
-#         addr = '{:08x}'.format(idx)
-#         for id in range(idx, idx+width, 2):
-#             h_b_l.append(h_b[id:id+2])
-#         l = ' '.join(h_b_l)
-
-#         lines.append('{}: {}    |{}|'.format(addr, l, ''.join(lascii[idx:idx+width])))
-
-#     return '\n'.join(lines)

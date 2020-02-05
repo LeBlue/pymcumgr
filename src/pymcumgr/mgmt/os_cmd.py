@@ -22,13 +22,11 @@ class CmdOS(CmdBase):
     def echo(echo_str, seq=0):
         hdr = MgmtHeader(MgmtOp.WRITE, MgmtGroup.OS, MgmtIdOS.ECHO, seq=seq)
         return CmdOS(hdr, {'d': echo_str})
-        #return CmdOS._encode(hdr, {'d': echo_str}, seq=seq)
 
     @staticmethod
     def reset(seq=0):
         hdr = MgmtHeader(MgmtOp.WRITE, MgmtGroup.OS, MgmtIdOS.RESET, seq=seq)
         return CmdOS(hdr, {})
-        #return CmdOS._encode(hdr, {}, seq=seq)
 
     @staticmethod
     def cons_echo_ctrl(seq=0):
@@ -57,14 +55,12 @@ class Echo(RequestBase):
 
         if len(rsp) > hdr.size:
             dec_msg = CborAttr.decode(rsp[hdr.size:])
-            print(dec_msg)
+            if self.__class__._debug:
+                print(dec_msg)
         self.response_data = dec_msg
         return self.response_data
 
 class Reset(RequestBase):
-
-    # def __init__(self):
-    #     super().__init__()
 
     def message(self):
         if not self.response_data:
@@ -78,7 +74,8 @@ class Reset(RequestBase):
 
         if len(rsp) > hdr.size:
             dec_msg = CborAttr.decode(rsp[hdr.size:])
-            print(dec_msg)
+            if self.__class__._debug:
+                print(dec_msg)
         self.response_data = dec_msg
 
 def registerOSCommandArguments(sub_parsers):

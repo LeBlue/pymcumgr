@@ -46,7 +46,7 @@ class GattMcumgr(Gatt):
         self.mcumgr_service = m_serv
         self.services = [self.mcumgr_service]
 
-        super().__init__(d, GATT_MCUMGR)
+        super().__init__(d, GATT_MCUMGR, warn_unmatched=False)
 
 
 
@@ -109,6 +109,7 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
         else:
             transport.loop.quit()
 
+    # catch all and save object for reraising from main context
     except Exception as e:
         transport.response = e
         transport.loop.quit()
@@ -130,25 +131,36 @@ class TransportBLE(object):
         self.response_decode_cb = None
         self.response = None
         self.debug = False
+        self.scan_args = None
 
     def run(self, request):
         self.request = request
 
-        if not self.gatt or not self.gatt.dev or not self.gatt.dev.connected():
+        if not (self.gatt and
+                self.gatt.dev and
+                self.gatt.dev.connected() and
+                self.gatt.mcumgr_service.mcumgr_char.obj):
             self._connect()
 
+        mcumgr_char = mcumgr.mcumgr_service.mcumgr_char
+        mcumgr_char.notifyOn(mcumgr_char_rsp, transport=self)
 
         self.seq += 1
         cmd_enc = request.message().encode(self.seq)
         GLib.timeout_add_seconds(0, self.gatt.mcumgr_service.mcumgr_char.write, cmd_enc)
-
+        self.timeout.start()
         try:
             self.loop.run()
         except (SystemExit, KeyboardInterrupt) as e:
             raise e from None
 
+        mcumgr_char.notifyOff()
+
         # if self.response:
         #     return self.response.payload_dict
+        self.timeout.cancel()
+        if self.timeout.remaining <= 0:
+            print('NMP Timeout:', str(request), file=sys.stderr)
 
         # raise / return Error, maybe not the best, but will do for now
         if self.response and isinstance(self.response, Exception):
@@ -181,21 +193,27 @@ class TransportBLE(object):
         if not dev:
             if self.debug:
                 print('Transport: Scanning ..')
-            hci.scan()
-            # TODO: wait for timeout parameter seconds
-            time.sleep(3)
-            hci.scan(enable=False)
+            hci.scan(args=self.scan_args)
+            # TODO: make this async
+            to = self.timeout.timeout
+            while to >= 0 and not dev:
+                to -= 2
+                time.sleep(2)
 
+                try:
+                    devs = hci.devices()
+                    for d in devs:
+                        if d.name.upper() == self.peer_id.upper():
+                            dev = d
+                            break
+
+                except BluezError as e:
+                    print(str(e), file=sys.stderr)
+                    sys.exit(1)
             try:
-                devs = hci.devices()
-                for d in devs:
-                    if d.name.upper() == self.peer_id.upper():
-                        dev = d
-                        break
-
+                hci.scan(enable=False)
             except BluezError as e:
                 print(str(e), file=sys.stderr)
-                sys.exit(1)
 
         if not dev:
             if self.peer_id:
@@ -217,10 +235,22 @@ class TransportBLE(object):
         mcumgr = GattMcumgr(d)
         mcumgr_char = mcumgr.mcumgr_service.mcumgr_char
 
-
-        mcumgr_char.notifyOn(mcumgr_char_rsp, transport=self)
-
         self.gatt = mcumgr
+
+
+    def close(self):
+        try:
+            self.gatt.mcumgr_service.mcumgr_char.notifyOff()
+        except BluezError:
+            pass
+        try:
+            self.gatt.dev.disconnect()
+        except BluezError:
+            pass
+
+        self.gatt = None
+        self.timeout.cancel()
+        self.timeout.reset()
 
     @staticmethod
     def fromCmdArgs(args):
