@@ -5,7 +5,6 @@ import re
 
 here = path.abspath(path.dirname(__file__))
 
-version = '0.1.0'
 pkgname = 'pymcumgr'
 src_dir = 'src'
 
