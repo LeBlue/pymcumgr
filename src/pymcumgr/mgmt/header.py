@@ -96,6 +96,22 @@ class MgmtErr(Enum):
             return False
         return True
 
+    @staticmethod
+    def from_response(rsp, allow_missing=False):
+        if not 'rc' in rsp:
+            if allow_missing:
+                return MgmtErr.EOK
+            return MgmtErr.EUNKNOWN
+            #raise ValueError('Missing Mgmt return code in payload: {}'.format(str(rsp)))
+        rc = rsp['rc']
+        try:
+            return MgmtErr(rc)
+        except ValueError as e:
+            return MgmtErr.EUNKNOWN
+                #raise ValueError('Invalid MgmtErr code in payload: {}'.format(str(rsp)))
+        return MgmtErr.EUNKNOWN
+
+
 '''
 #define MGMT_HDR_SIZE           8
 
@@ -181,9 +197,9 @@ class RequestBase(object):
 
     def parse_response(self, rsp):
         '''
-        parameter rsp, bytes of response
+        parameter rsp, bytes of response, guaranteed to have required bytes according to header (reassembled)
         tracks current state of request,
-        return parsed response data as dict or custom object
+        return valid ResponseBase or inherited object
         '''
         raise NotImplementedError('Must be provided by subclass')
 
@@ -258,3 +274,16 @@ class CmdBase(object):
     def __str__(self):
         return '{} {}'.format(str(self.hdr), str(self.payload_dict))
 
+class ResponseBase(object):
+
+    _debug = False
+
+    def __init__(self, err, rsp_data, rsp_obj=None):
+        if not isinstance(err, MgmtErr):
+            raise ValueError('First argment must be MgmtErr')
+        self.err = err
+        self.data = rsp_data
+        self.obj = rsp_obj
+
+    def __str__(self):
+        return 'Response({},{})'.format(str(self.err), str(self.obj) if self.obj else str(self.data))

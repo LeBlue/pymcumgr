@@ -69,6 +69,7 @@ def main():
     parser.add_argument('-t', '--timeout', metavar='float', type=float, default=10,
                         help='timeout in seconds (partial seconds allowed) (default 10)'
     )
+    parser.add_argument('-l', '--log-level', metavar='level', type=str, default='info', help='enable debug printing by settting level to \'debug\'')
 
     # sub command parser
     subs = parser.add_subparsers(title='Available Commands',
@@ -81,7 +82,7 @@ def main():
     subs.add_parser('version', help='Display the %(prog)s version number')
 
     args = parser.parse_args()
-
+    debug = True if args.log_level == 'debug' else False
     #print(args)
 
     # handle static commmands here
@@ -100,34 +101,48 @@ def main():
 
 
     transport = TransportBLE.fromCmdArgs(args)
+    transport.debug = debug
 
     if args.command == 'image':
         if args.img_cmd == 'list':
 
             rsp = transport.run(ImageList())
 
-            print('list returend')
-            print(rsp)
+            if debug:
+                print('list returned')
+                print(rsp)
             if rsp:
-                for idx, sl in enumerate(ImgDescription(rsp).slots):
-                    print('image:{} {}'.format(idx, str(sl)))
+                if rsp.err:
+                    print(str(err))
+                elif rsp.obj:
+                    for idx, sl in enumerate(rsp.obj.slots):
+                        print('image:{} {}'.format(idx, str(sl)))
+
         elif args.img_cmd == 'confirm':
             rsp = transport.run(ImageConfirm())
 
-            print('list returend')
-            print(rsp)
+            if debug:
+                print('confirm returned')
+                print(rsp)
             if rsp:
-                for idx, sl in enumerate(ImgDescription(rsp).slots):
-                    print('image:{} {}'.format(idx, str(sl)))
+                if rsp.err:
+                    print(str(err))
+                elif rsp.obj:
+                    for idx, sl in enumerate(rsp.obj.slots):
+                        print('image:{} {}'.format(idx, str(sl)))
 
         elif args.img_cmd == 'test':
             rsp = transport.run(ImageTest(args.hash))
 
-            print('list returend')
-            print(rsp)
+            if debug:
+                print('test returned')
+                print(rsp)
             if rsp:
-                for idx, sl in enumerate(ImgDescription(rsp).slots):
-                    print('image:{} {}'.format(idx, str(sl)))
+                if rsp.err:
+                    print(str(err))
+                elif rsp.obj:
+                    for idx, sl in enumerate(rsp.obj.slots):
+                        print('image:{} {}'.format(idx, str(sl)))
 
 
         elif args.img_cmd == 'upload':
@@ -136,18 +151,20 @@ def main():
                 contents = f.read()
 
             # TODO: don't know how to obtain MTU, set static for now
-            rsp = transport.run(ImageUpload(MCUBootImage(contents), mtu=252))
+            rsp = transport.run(ImageUpload(MCUBootImage(contents), mtu=252, progress=True))
 
-            print('upload returend')
-            print(rsp)
+            if debug:
+                print('upload returned')
+                print(rsp)
             if rsp:
                 print('Done')
         elif args.img_cmd == 'erase':
             rsp = transport.run(ImageErase())
 
-            print('erase returend')
-            if rsp:
-                print(rsp)
+            if debug:
+                print('erase returned')
+                if rsp:
+                    print(rsp)
             print('Done')
 
 
@@ -156,36 +173,23 @@ def main():
 
     elif args.command == 'echo':
         rsp = transport.run(Echo(args.text))
-        #GLib.timeout_add_seconds(0, send_command, mcumgr_char, loop, timeout, CmdImg.imageList)
-        print('echo returend')
+        if debug:
+            print('echo returned')
         if rsp:
-            print(rsp)
-        print('Done')
+            print(rsp.obj)
+        else:
+            print('Done')
 
     elif args.command == 'reset':
         rsp = transport.run(Reset())
-        #GLib.timeout_add_seconds(0, send_command, mcumgr_char, loop, timeout, CmdImg.imageList)
         print('reset returend')
         if rsp:
-            print(rsp)
-        print('Done')
+            print(rsp.obj)
+        else:
+            print('Done')
 
     else:
         raise NotImplementedError('Command: {}'.format(args.command))
-
-
-    #sys.exit(1)
-
-    # try:
-    #     loop.run()
-    # except (SystemExit, KeyboardInterrupt):
-    #     pass
-
-def image_list():
-    GLib.timeout_add_seconds(0, send_command, mcumgr_char, loop, timeout, CmdImg.imageList)
-
-def image_confirm():
-    pass
 
 
 if __name__ == "__main__":

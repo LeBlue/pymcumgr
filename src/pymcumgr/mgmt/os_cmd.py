@@ -1,6 +1,6 @@
 from enum import Enum
 
-from .header import MgmtHeader, MgmtGroup, MgmtOp, CmdBase, RequestBase
+from .header import MgmtHeader, MgmtGroup, MgmtOp, MgmtErr, CmdBase, RequestBase, ResponseBase
 from .cborattr import CborAttr
 
 class MgmtIdOS(Enum):
@@ -53,11 +53,18 @@ class Echo(RequestBase):
         if hdr.op != MgmtOp.WRITE_RSP or hdr.group != MgmtGroup.OS or hdr.id != MgmtIdOS.ECHO:
             raise ValueError('Not a echo command response: {}'.format(str(hdr)))
 
-        if len(rsp) > hdr.size:
-            dec_msg = CborAttr.decode(rsp[hdr.size:])
-            if self.__class__._debug:
-                print(dec_msg)
-        self.response_data = dec_msg
+        # is guaranteed
+        # if len(rsp) > hdr.size:
+        #     raise ValueError('Echo command response to short: {}'.format(str(hdr)))
+
+        dec_msg = CborAttr.decode(rsp[hdr.size:])[0]
+        if self.__class__._debug:
+            print(dec_msg)
+        if not 'r' in dec_msg:
+            raise ValueError('Echo response missing \"r\" key: {}'.format(str(dec_msg)))
+
+        self.response_data = ResponseBase(MgmtErr.EOK, dec_msg, dec_msg['r'])
+
         return self.response_data
 
 class Reset(RequestBase):
@@ -72,11 +79,17 @@ class Reset(RequestBase):
         if hdr.op != MgmtOp.WRITE_RSP or hdr.group != MgmtGroup.OS or hdr.id != MgmtIdOS.RESET:
             raise ValueError('Not a reset command response: {}'.format(str(hdr)))
 
-        if len(rsp) > hdr.size:
-            dec_msg = CborAttr.decode(rsp[hdr.size:])
-            if self.__class__._debug:
-                print(dec_msg)
-        self.response_data = dec_msg
+        # is guaranteed
+        # if len(rsp) > hdr.size:
+        #     raise ValueError('Reset command response to short: {}'.format(str(hdr)))
+
+
+        dec_msg = CborAttr.decode(rsp[hdr.size:])[0]
+        if self.__class__._debug:
+            print(dec_msg)
+
+        self.response_data = ResponseBase(MgmtErr.EOK, dec_msg)
+        return self.response_data
 
 def registerOSCommandArguments(sub_parsers):
 

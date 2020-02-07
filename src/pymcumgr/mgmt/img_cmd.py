@@ -1,7 +1,8 @@
 from enum import Enum
-from .header import MgmtHeader, MgmtGroup, MgmtOp, MgmtErr, CmdBase, RequestBase
+from .header import MgmtHeader, MgmtGroup, MgmtOp, MgmtErr, CmdBase, RequestBase, ResponseBase
 from .cborattr import CborAttr
 
+import time
 import sys
 
 class MgmtIdImg(Enum):
@@ -107,10 +108,13 @@ class CmdImg(CmdBase):
     @staticmethod
     def setState(new_state, seq=0):
         hdr = MgmtHeader(MgmtOp.WRITE, MgmtGroup.IMAGE, MgmtIdImg.STATE, seq=seq)
+        if CmdBase._debug:
+            print(str(hdr))
+            print(str(new_state))
         return CmdImg(hdr, new_state)
 
     @staticmethod
-    def setStateCompleted(rsp):
+    def setStateCompleted(rsp, allow_missing_rc=False):
         cmd = CmdImg.decode_header(rsp)
 
         # no complete packet
@@ -123,24 +127,22 @@ class CmdImg(CmdBase):
             raise ValueError('Unexpected response: {}'.format(cmd.hdr))
 
         dec_msg = cmd.decode()
-        rc = 0
         if CmdBase._debug:
             print('decoded:', str(dec_msg))
-        if 'rc' in dec_msg:
-            raise ValueError('Missing return code in payload')
-            rc = dec_msg['rc']
 
+        err = MgmtErr.from_response(dec_msg, allow_missing=allow_missing_rc)
 
-        if rc == 0:
+        if not err:
+            img_desc = ImgDescription(dec_msg)
             if CmdBase._debug:
-                print(ImgDescription(dec_msg))
-                for idx, sl in enumerate(ImgDescription(dec_msg).slots):
+                print(img_desc)
+                for idx, sl in enumerate(img_desc.slots):
                     print('image:{} {}'.format(idx, str(sl)))
+
         else:
-            err = MgmtErr(rc)
             raise ValueError('{}: {}'.format(err.value, str(err)))
 
-        return cmd
+        return ResponseBase(err, dec_msg, img_desc)
 
     @staticmethod
     def getStateCompleted(rsp):
@@ -156,13 +158,20 @@ class CmdImg(CmdBase):
             raise ValueError('Unexpected response: {}'.format(cmd.hdr))
 
         dec_msg = cmd.decode()
-        if CmdBase._debug:
-            print(dec_msg)
-            print(ImgDescription(dec_msg))
-            for idx, sl in enumerate(ImgDescription(dec_msg).slots):
-                print('image:{} {}'.format(idx, str(sl)))
 
-        return cmd
+        err = MgmtErr.from_response(dec_msg, allow_missing=True)
+
+        if not err:
+            img_desc = ImgDescription(dec_msg)
+            if CmdBase._debug:
+                print(img_desc)
+                for idx, sl in enumerate(img_desc.slots):
+                    print('image:{} {}'.format(idx, str(sl)))
+
+        else:
+            raise ValueError('{}: {}'.format(err.value, str(err)))
+
+        return ResponseBase(err, dec_msg, img_desc)
 
 
     @staticmethod
@@ -187,7 +196,6 @@ class CmdImg(CmdBase):
         cmd = CmdImg(hdr, {
                 'off': offset,
                 'len': len(img_bytes),
-                'image': 0,
                 'data': b'',
                 'sha': sha
             })
@@ -200,14 +208,13 @@ class CmdImg(CmdBase):
 
         d_len = max_len - pkt_len
         if CmdBase._debug:
-            print('Lengths: max:', max_len, 'pkt:', pkt_len, 'd:', d_len)
-            print('dl:', len(img_bytes[offset:(offset + d_len)]))
+            print('Lengths: max_len:', max_len, 'pkt_len:', pkt_len, 'data_len:', d_len)
+            print('data_len:', len(img_bytes[offset:(offset + d_len)]))
             print('Adding', d_len, 'bytes of data')
 
         return CmdImg(hdr, {
                 'off': offset,
                 'sha': sha,
-                'image': 0,
                 'len': len(img_bytes),
                 'data': img_bytes[offset:(offset + d_len)],
             })
@@ -262,19 +269,12 @@ class CmdImg(CmdBase):
             raise ValueError('Unexpected response: {}'.format(cmd.hdr))
 
         dec_msg = cmd.decode()
-        rc = 0
         if CmdBase._debug:
             print('decoded:', str(dec_msg))
 
-        if not 'rc' in dec_msg:
-            raise ValueError('Missing return code in payload')
+        err = MgmtErr.from_response(dec_msg)
 
-        rc = dec_msg['rc']
-        if rc != 0:
-            err = MgmtErr(rc)
-            raise ValueError('{}: {}'.format(err.value, str(err)))
-
-        return cmd
+        return ResponseBase(err, dec_msg, None)
 
 class ImageErase(RequestBase):
     def __init__(self):
@@ -288,7 +288,7 @@ class ImageErase(RequestBase):
 
     def parse_response(self, rsp):
         rsp_cmd = CmdImg.imageEraseCompleted(rsp)
-        self.response_data = rsp_cmd.payload_dict
+        self.response_data = rsp_cmd
         return self.response_data
 
 class ImageList(RequestBase):
@@ -302,8 +302,7 @@ class ImageList(RequestBase):
         return CmdImg.getState()
 
     def parse_response(self, rsp):
-        rsp_cmd = CmdImg.getStateCompleted(rsp)
-        self.response_data = rsp_cmd.payload_dict
+        self.response_data = CmdImg.getStateCompleted(rsp)
         return self.response_data
 
 class ImageTest(RequestBase):
@@ -321,7 +320,6 @@ class ImageTest(RequestBase):
         assert type(sha_b) == bytes
         self.sha = sha
         self._sha_b = sha_b
-        return
 
 
     def message(self):
@@ -334,8 +332,7 @@ class ImageTest(RequestBase):
                 })
 
     def parse_response(self, rsp):
-        rsp_cmd = CmdImg.setStateCompleted(rsp)
-        self.response_data = rsp_cmd.payload_dict
+        self.response_data = CmdImg.setStateCompleted(rsp, allow_missing_rc=True)
         return self.response_data
 
 
@@ -352,8 +349,7 @@ class ImageConfirm(RequestBase):
                 })
 
     def parse_response(self, rsp):
-        rsp_cmd = CmdImg.setStateCompleted(rsp)
-        self.response_data = rsp_cmd.payload_dict
+        self.response_data = CmdImg.setStateCompleted(rsp, allow_missing_rc=True)
         return self.response_data
 
 
@@ -370,15 +366,31 @@ class ImageUpload(RequestBase):
         self.mtu = mtu - 5
         self.seq = 0
         self.progress = progress
+        self.starttime = None
 
     def message(self):
+        # Nothing received => starting message
         if self.response_data == None:
+            self.starttime = time.time()
             cmd = CmdImg.imageUploadStart(self.image, self.current_offset, self.mtu, self.sha)
             self.next_offset = self.current_offset + len(cmd.payload_dict['data'])
 
+        elif self.response_data.err:
+            # last rsp was mgmt err
+            return None
         elif self.current_offset >= len(self.image):
             # we are done
+            if self.progress:
+                et = time.time()
+                elapsed = (et - self.starttime)
+                speed = self.len / elapsed
+                print('{}s ({:3.1f} kb/s)'.format(int(elapsed), speed/1024))
             return None
+
+        elif self.current_offset == 0:
+            # restart
+            cmd = CmdImg.imageUploadStart(self.image, self.current_offset, self.mtu, self.sha)
+            self.next_offset = self.current_offset + len(cmd.payload_dict['data'])
         else:
             cmd =  CmdImg.imageUploadContinue(self.image, self.current_offset, self.mtu, self.sha)
             self.next_offset = self.current_offset + len(cmd.payload_dict['data'])
@@ -396,17 +408,21 @@ class ImageUpload(RequestBase):
             if CmdBase._debug:
                 print(dec_msg)
 
-        self.response_data = dec_msg
+        err = MgmtErr.from_response(dec_msg)
+        if err:
+            self.response_data = ResponseBase(err, dec_msg, None)
+            return self.response_data
 
-        if self.response_data['off'] != self.next_offset:
-            print('Missed a packet, resending offset:', self.response_data['off'], file=sys.stderr)
+        if dec_msg['off'] != self.next_offset:
+            print('Missed a packet, resending offset:', dec_msg['off'], file=sys.stderr)
 
-        self.current_offset = self.response_data['off']
+        self.current_offset = dec_msg['off']
 
         if self.progress:
             percent = (self.current_offset / len(self.image)) * 100
-            print('{} / {} ({:3.1f}%)'.format(self.current_offset, len(self.image)), percent)
+            print('{} / {} ({:3.1f}%)'.format(self.current_offset, len(self.image), percent))
 
+        self.response_data = ResponseBase(err, dec_msg, None)
         return self.response_data
 
 

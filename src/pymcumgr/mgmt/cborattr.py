@@ -170,7 +170,7 @@ class CborAttr(object):
         #parser = CborParser()
         #it = parser.init(data)
         it = CborDecoder(data)
-        
+
         if it.at_end():
             if _pr_debug:
                 print("Empty")

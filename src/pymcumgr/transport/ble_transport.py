@@ -101,10 +101,20 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
         if transport.debug:
             print('Transport: Received:', transport.response)
 
+        if transport.response.err:
+            print(transport.response.err)
+            transport.loop.quit()
+        if transport.debug:
+            print(transport.response.obj)
+
         next_msg = transport.request.message()
         if next_msg:
             cmd_enc = next_msg.encode(transport.seq)
             transport.timeout.reset()
+            # encode will set leng and seq, print afterwards
+            if transport.debug:
+                print(next_msg.hdr)
+                print(next_msg.payload_dict)
             transport.gatt.mcumgr_service.mcumgr_char.write(cmd_enc)
         else:
             transport.loop.quit()
@@ -127,7 +137,7 @@ class TransportBLE(object):
         self.adapter = 'hci' + str(adapter)
         self.gatt = None
         self.fragment = None
-        self.seq = 0
+        self.seq = -1
         self.response_decode_cb = None
         self.response = None
         self.debug = False
@@ -142,11 +152,24 @@ class TransportBLE(object):
                 self.gatt.mcumgr_service.mcumgr_char.obj):
             self._connect()
 
-        mcumgr_char = mcumgr.mcumgr_service.mcumgr_char
+        mcumgr_char = self.gatt.mcumgr_service.mcumgr_char
+        if not mcumgr_char.obj:
+            print('Device {} does not support mcumgr characteristic'.format(self.peer_id), file=sys.stderr)
+            sys.exit(1)
+        else:
+            print(mcumgr_char.obj)
         mcumgr_char.notifyOn(mcumgr_char_rsp, transport=self)
 
         self.seq += 1
-        cmd_enc = request.message().encode(self.seq)
+        print('seq:', self.seq)
+        cmd = request.message()
+
+        cmd_enc = cmd.encode(self.seq)
+        # encode will set leng and seq, print afterwards
+        if self.debug:
+            print(cmd.hdr)
+            print(cmd.payload_dict)
+
         GLib.timeout_add_seconds(0, self.gatt.mcumgr_service.mcumgr_char.write, cmd_enc)
         self.timeout.start()
         try:
@@ -161,6 +184,7 @@ class TransportBLE(object):
         self.timeout.cancel()
         if self.timeout.remaining <= 0:
             print('NMP Timeout:', str(request), file=sys.stderr)
+            return None
 
         # raise / return Error, maybe not the best, but will do for now
         if self.response and isinstance(self.response, Exception):
