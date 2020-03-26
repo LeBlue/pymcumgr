@@ -212,11 +212,14 @@ class CmdImg(CmdBase):
             print('data_len:', len(img_bytes[offset:(offset + d_len)]))
             print('Adding', d_len, 'bytes of data')
 
+        # putting 'data' at end will trigger corruption in cbor on the FW. ( on z2.0.0)
+        # ('data' key pointer will LSB will be set to 0, while copying sha value)
+        # new accepted 'data' key will be some arbitrary string at that location
         return CmdImg(hdr, {
                 'off': offset,
+                'data': img_bytes[offset:(offset + d_len)],
                 'sha': sha,
                 'len': len(img_bytes),
-                'data': img_bytes[offset:(offset + d_len)],
             })
 
     @staticmethod
