@@ -101,6 +101,7 @@ def main():
 
 
     transport = TransportBLE.fromCmdArgs(args)
+    transport.set_timeout(args.timeout)
     transport.debug = debug
 
     if args.command == 'image':
@@ -151,7 +152,12 @@ def main():
                 contents = f.read()
 
             # TODO: don't know how to obtain MTU, set static for now
-            rsp = transport.run(ImageUpload(MCUBootImage(contents), mtu=252, progress=True))
+            transport._connect()
+            try:
+                mtu = transport.gatt.dev.MTU
+            except:
+                mtu = 160
+            rsp = transport.run(ImageUpload(MCUBootImage(contents), mtu=mtu, progress=True))
 
             if debug:
                 print('upload returned')
@@ -159,8 +165,10 @@ def main():
             if rsp:
                 print('Done')
         elif args.img_cmd == 'erase':
+            # always to low
+            transport.set_timeout(args.timeout + 20)
             rsp = transport.run(ImageErase())
-
+            transport.set_timeout(args.timeout)
             if debug:
                 print('erase returned')
                 if rsp:
