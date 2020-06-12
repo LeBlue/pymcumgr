@@ -16,7 +16,7 @@ GATT_MCUMGR = [
             {
                 'name': 'mcumgr_char',
                 'uuid': 'da2e7828-fbce-4e01-ae9e-261174997c48',
-                'form': FormatRaw
+                'fmt': FormatRaw
             }
         ] ,
     }
@@ -27,12 +27,13 @@ class GattCharacteristicMcumgr(GattCharacteristic):
         super().__init__(
             GATT_MCUMGR[0]['chars'][0]['name'],
             GATT_MCUMGR[0]['chars'][0]['uuid'],
-            GATT_MCUMGR[0]['chars'][0]['form']
+            GATT_MCUMGR[0]['chars'][0]['fmt']
         )
 
 class GattServiceMcumgr(GattService):
     def __init__(self):
         self.mcumgr_char = GattCharacteristicMcumgr()
+        self.mcumgr_char.service = self
         self.chars = [self.mcumgr_char]
         super().__init__(
             GATT_MCUMGR[0]['name'],
@@ -134,7 +135,7 @@ class TransportBLE(object):
         self.peer_name = peer_name
         self.loop = GLib.MainLoop()
         self.timeout = CmdTimeout(timeout, self.loop)
-        self.adapter = 'hci' + str(adapter)
+        self.adapter = adapter if str(adapter).startswith('hci') else 'hci' + str(adapter)
         self.gatt = None
         self.fragment = None
         self.seq = -1
@@ -143,12 +144,16 @@ class TransportBLE(object):
         self.debug = False
         self.scan_args = None
 
+    def set_timeout(self, timeout_sec):
+        self.timeout.timeout = timeout_sec
+        self.timeout.reset()
+
     def run(self, request):
         self.request = request
 
         if not (self.gatt and
                 self.gatt.dev and
-                self.gatt.dev.connected() and
+                self.gatt.dev.connected and
                 self.gatt.mcumgr_service.mcumgr_char.obj):
             self._connect()
 
@@ -158,7 +163,8 @@ class TransportBLE(object):
             sys.exit(1)
         else:
             print(mcumgr_char.obj)
-        mcumgr_char.notifyOn(mcumgr_char_rsp, transport=self)
+        mcumgr_char.onValueChanged(mcumgr_char_rsp, transport=self)
+        mcumgr_char.notifyOn()
 
         self.seq += 1
         print('seq:', self.seq)
@@ -178,6 +184,7 @@ class TransportBLE(object):
             raise e from None
 
         mcumgr_char.notifyOff()
+        mcumgr_char.onValueChanged(None)
 
         # if self.response:
         #     return self.response.payload_dict
