@@ -245,8 +245,8 @@ class TransportBLE(object):
 
         if not dev:
             if self.debug:
-                print('Transport: Scanning ..')
-            hci.scan(args=self.scan_args)
+                print('Transport: Scanning on {} ..'.format(hci.name))
+            hci.scan(filters=self.scan_args)
             # TODO: make this async
             to = self.timeout.timeout
             while to >= 0 and not dev:
@@ -324,6 +324,9 @@ class TransportBLE(object):
                         cs_attrs[0], TransportBLE._valid_cs_attrs)
                 )
             n_connstring[cs_attrs[0]] = cs_attrs[1]
+
+        if args.hci:
+            n_connstring['adapter'] = args.hci
 
         return TransportBLE(**n_connstring)
 
