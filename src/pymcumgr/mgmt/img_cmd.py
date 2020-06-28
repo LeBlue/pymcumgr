@@ -233,24 +233,33 @@ class CmdImg(CmdBase):
 
         hdr = MgmtHeader(MgmtOp.WRITE, MgmtGroup.IMAGE, MgmtIdImg.UPLOAD, seq=seq)
 
-        # Need to check how much data to append.
-        cmd = CmdImg(hdr, {
-                'off': offset,
-                'image': 0,
-                'data': b''
-            })
+        # TODO: size hint does not work as encoded offset len increases (1byte/2byte/4byte..)
+        # allocate 4 bytes for it, should not need more
+        if not data_len_hint:
+            # Need to check how much data to append.
+            cmd = CmdImg(hdr, {
+                    'off': 65536,
+                    'data': b''
+                })
 
-        pkt_len = len(cmd.encode())
-        if pkt_len >= max_len:
-            # can we fragement it ? can we start w/o data attribute?
-            raise ValueError('MTU to short for this packet')
+            pkt_len = len(cmd.encode())
 
-        d_len = max_len - pkt_len
+            if pkt_len >= max_len:
+                # can we fragement it ? can we start w/o data attribute?
+                raise ValueError('MTU to short for this packet')
+
+            d_len = max_len - pkt_len
+        else:
+            d_len = data_len_hint
+
         if CmdBase._debug:
-            print('offset', offset)
+            print('UL Continue at offset', offset)
+
+        if d_len <= 0:
+            raise ValueError('Data len calculation failed, got:', d_len)
+
         return CmdImg(hdr, {
                     'off': offset,
-                    'image': 0,
                     'data': img_bytes[offset:(offset + d_len)],
                 })
 
@@ -363,43 +372,47 @@ class ImageConfirm(RequestBase):
 class ImageUpload(RequestBase):
     def __init__(self, mcuboot_image, mtu=252, progress=False):
         super().__init__()
-        self.image = mcuboot_image.data
+        self.image = mcuboot_image
         self.sha = mcuboot_image.hash()
         self.current_offset = 0
         self.next_offset = 0
+        self.retry_offset = 3
         self.len = len(mcuboot_image.data)
         self.image_slot = 0
         # Need 12 b for other proto layers?
         self.mtu = mtu - 5
+        self.data_len_hint = 0
         self.seq = 0
         self.progress = progress
+        self._progress_last = 0
+        self._progress_init_offset = 0
         self.starttime = None
 
     def message(self):
         # Nothing received => starting message
         if self.response_data == None:
             self.starttime = time.time()
-            cmd = CmdImg.imageUploadStart(self.image, self.current_offset, self.mtu, self.sha)
+            cmd = CmdImg.imageUploadStart(self.image.data, self.current_offset, self.mtu, self.sha)
             self.next_offset = self.current_offset + len(cmd.payload_dict['data'])
 
         elif self.response_data.err:
             # last rsp was mgmt err
             return None
-        elif self.current_offset >= len(self.image):
+        elif self.current_offset >= len(self.image.data):
             # we are done
             if self.progress:
                 et = time.time()
                 elapsed = (et - self.starttime)
-                speed = self.len / elapsed
+                speed = (self.len - self._progress_init_offset) / elapsed
+                print('{} / {} (100%)'.format(len(self.image.data), len(self.image.data)))
                 print('{}s ({:3.1f} kb/s)'.format(int(elapsed), speed/1024))
             return None
 
-        elif self.current_offset == 0:
-            # restart
-            cmd = CmdImg.imageUploadStart(self.image, self.current_offset, self.mtu, self.sha)
-            self.next_offset = self.current_offset + len(cmd.payload_dict['data'])
+        # should not completely restart (in case MTU is to small to include first data)
+        # newer mcumgr version will not even accept it
         else:
-            cmd =  CmdImg.imageUploadContinue(self.image, self.current_offset, self.mtu, self.sha)
+            cmd = CmdImg.imageUploadContinue(self.image.data, self.current_offset, self.mtu, data_len_hint=self.data_len_hint)
+            self.data_len_hint = len(cmd.payload_dict['data'])
             self.next_offset = self.current_offset + len(cmd.payload_dict['data'])
 
         return cmd
@@ -423,20 +436,36 @@ class ImageUpload(RequestBase):
             self.response_data = ResponseBase(err, dec_msg, None)
             return self.response_data
 
+        if not 'off' in dec_msg:
+            raise ValueError('Missing key \'off\' in response')
+
         if dec_msg['off'] != self.next_offset:
-            print('Missed a packet, resending offset:', dec_msg['off'], file=sys.stderr)
+            if dec_msg['off'] < self.next_offset:
+                if self.retry_offset >= 0:
+                    print('Missed a packet, resending offset:', dec_msg['off'], file=sys.stderr)
+                    self.retry_offset -= 1
+                else:
+                    raise ValueError("Exeeded retries on resend, off:", dec_msg['off'])
+            else:
+                print('Upload continue ...')
+                self._progress_init_offset = dec_msg['off']
+        else:
+            self.retry_offset = 3
 
         self.current_offset = dec_msg['off']
 
         if self.progress:
-            percent = (self.current_offset / len(self.image)) * 100
-            print('{} / {} ({:3.1f}%)'.format(self.current_offset, len(self.image), percent))
+            percent = int((self.current_offset / len(self.image.data)) * 100)
+            # prevent exessive printing
+            if percent - self._progress_last >= 1:
+                self._progress_last = percent
+                print('{} / {} ({}%)'.format(self.current_offset, len(self.image.data), percent))
 
         self.response_data = ResponseBase(err, dec_msg, None)
         return self.response_data
 
     def __str__(self):
-        return '{}(image=MCUBootImage(version={},hash={}))'.format(self.__class__.__name__, self.image.version, self.sha)
+        return '{}(image=MCUBootImage(version={},hash={}))'.format(self.__class__.__name__, self.image.version, self.image.hash_str())
 
 def _image_hash(val):
     if isinstance(val, str):
@@ -465,47 +494,4 @@ def registerImageCommandArguments(sub_parsers):
     img_subs.add_parser('erase', help='Erase unused image on a device')
 
     return img_cmd_parser
-'''
-/*
- * Response to list:
- * {
- *      "images":[ <version1>, <version2>]
- * }
- *
- *
- * Request to boot to version:
- * {
- *      "test":<version>
- * }
- *
- *
- * Response to boot read:
- * {
- *	"test":<version>,
- *	"main":<version>,
- *      "active":<version>
- * }
- *
- *
- * Request to image upload:
- * {
- *      "off":<offset>,
- *      "len":<img_size>		inspected when off = 0
- *      "data":<base64encoded binary>
- * }
- *
- *
- * Response to upload:
- * {
- *      "off":<offset>
- * }
- *
- *
- * Request to image upload:
- * {
- *      "off":<offset>
- *	    "name":<filename>		inspected when off = 0
- *      "len":<file_size>		inspected when off = 0
- *      "data":<base64encoded binary>
- * }
-'''
+
