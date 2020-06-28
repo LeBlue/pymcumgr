@@ -59,7 +59,7 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
             print(char, changed_vals)
             print(transport)
 
-        transport.timeout.reset()
+        transport.timeout.cancel()
 
         if transport.fragment:
             transport.fragment = transport.fragment + changed_vals.value
@@ -79,7 +79,8 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
             if transport.debug:
                 print('Transport: Incomplete complete header')
             return
-        print(cmd_rsp.hdr)
+        if transport.debug:
+            print(cmd_rsp.hdr)
         if (cmd_rsp.hdr.size + cmd_rsp.hdr.length) > len(transport.fragment):
             if transport.debug:
                 print('Transport: Fragmented packet')
@@ -103,7 +104,7 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
             print('Transport: Received:', transport.response)
 
         if transport.response.err:
-            print(transport.response.err)
+            print(transport.response.err, file=sys.stderr)
             transport.loop.quit()
         if transport.debug:
             print(transport.response.obj)
@@ -111,11 +112,12 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
         next_msg = transport.request.message()
         if next_msg:
             cmd_enc = next_msg.encode(transport.seq)
-            transport.timeout.reset()
+
             # encode will set leng and seq, print afterwards
             if transport.debug:
                 print(next_msg.hdr)
                 print(next_msg.payload_dict)
+            transport.timeout.start()
             transport.gatt.mcumgr_service.mcumgr_char.write(cmd_enc)
         else:
             transport.loop.quit()
@@ -134,7 +136,8 @@ class TransportBLE(object):
         self.peer_id = peer_id.upper()
         self.peer_name = peer_name
         self.loop = GLib.MainLoop()
-        self.timeout = CmdTimeout(timeout, self.loop)
+        self.cmd_timeout = timeout
+        self.timeout = CmdTimeout(self.cmd_timeout, self.loop.quit)
         self.adapter = adapter if str(adapter).startswith('hci') else 'hci' + str(adapter)
         self.gatt = None
         self.fragment = None
@@ -145,8 +148,11 @@ class TransportBLE(object):
         self.scan_args = None
 
     def set_timeout(self, timeout_sec):
-        self.timeout.timeout = timeout_sec
-        self.timeout.reset()
+        self.cmd_timeout = timeout_sec
+        if self.timeout:
+            self.timeout.cancel()
+            self.timeout.timeout = self.cmd_timeout
+
 
     def run(self, request):
         self.request = request
@@ -182,15 +188,20 @@ class TransportBLE(object):
         self.timeout.start()
         try:
             self.loop.run()
+            self.timeout.cancel()
         except (SystemExit, KeyboardInterrupt) as e:
+            self.timeout.cancel()
             raise e from None
 
-        mcumgr_char.notifyOff()
-        mcumgr_char.onValueChanged(None)
+        try:
+            mcumgr_char.notifyOff()
+            mcumgr_char.onValueChanged(None)
+        except BluezError:
+            pass
 
         # if self.response:
         #     return self.response.payload_dict
-        self.timeout.cancel()
+
         if self.timeout.remaining <= 0:
             print('NMP Timeout:', str(request), file=sys.stderr)
             return None
@@ -282,8 +293,9 @@ class TransportBLE(object):
             pass
 
         self.gatt = None
-        self.timeout.cancel()
-        self.timeout.reset()
+        if self.timeout:
+            self.timeout.cancel()
+
 
     @staticmethod
     def fromCmdArgs(args):

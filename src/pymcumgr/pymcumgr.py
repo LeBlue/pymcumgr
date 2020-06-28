@@ -157,7 +157,12 @@ def main():
                 mtu = transport.gatt.dev.MTU
             except:
                 mtu = 160
+
+            # always to low (erase)
+            transport.set_timeout(args.timeout + 20)
             rsp = transport.run(ImageUpload(MCUBootImage(contents), mtu=mtu, progress=True))
+            transport.set_timeout(args.timeout)
+
 
             if debug:
                 print('upload returned')

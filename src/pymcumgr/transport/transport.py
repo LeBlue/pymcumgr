@@ -3,44 +3,35 @@ import sys
 
 class CmdTimeout(object):
 
-    def __init__(self, timeout_secs, loop, expired_cb=None, *args, **kwargs):
+    def __init__(self, timeout_secs, cb, *args, **kwargs):
         self.timeout = timeout_secs
         self.remaining = timeout_secs
         self.canceled = False
-        if expired_cb:
-            self.expired_cb = expired_cb
-            self.expired_cb_args = args
-            self.expired_cb_kwargs = kwargs
-        else:
-            def mainloop_quit():
-                print('NMP Timeout', file=sys.stderr)
-                loop.quit()
-
-            self.expired_cb = mainloop_quit
-            self.expired_cb_args = ()
-            self.expired_cb_kwargs = {}
-        #GLib.timeout_add_seconds(1, self._tick)
+        self.expired_cb = cb
+        self.expired_cb_args = args
+        self.expired_cb_kwargs = kwargs
+        self._event_id = None
 
 
-    def _tick(self):
-        self.remaining -= 1
-        if self.remaining <= 0 and not self.canceled:
-            if self.expired_cb:
-                self.expired_cb(*self.expired_cb_args, **self.expired_cb_kwargs)
-            return False
-
-        return not self.canceled
+    def _expired(self):
+        self.remaining = 0
+        self._event_id = None
+        if self.expired_cb:
+            self.expired_cb(*self.expired_cb_args, **self.expired_cb_kwargs)
+        return False
 
     def reset(self):
-        self.remaining = self.timeout
+        self.cancel()
+        self.start()
 
     def start(self):
-        self.reset()
-        self.canceled = False
-        GLib.timeout_add_seconds(1, self._tick)
+        self.remaining = self.timeout
+        self._event_id = GLib.timeout_add_seconds(self.timeout, self._expired)
 
     def cancel(self):
-        self.canceled = True
+        if self._event_id != None:
+            GLib.source_remove(self._event_id)
+            self._event_id = None
 
 
 class Transport(object):
