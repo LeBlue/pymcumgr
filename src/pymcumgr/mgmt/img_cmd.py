@@ -30,7 +30,7 @@ class SlotDescription(object):
 
 
         except KeyError as e:
-            raise KeyError('key {} expected'.format(str(e))) from None
+            raise KeyError('key expected in slot: {}'.format(str(e))) from None
 
 
     def __str__(self):
@@ -338,6 +338,8 @@ class ImageTest(RequestBase):
         self.response_data = CmdImg.setStateCompleted(rsp, allow_missing_rc=True)
         return self.response_data
 
+    def __str__(self):
+        return '{}(hash={})'.format(self.__class__.__name__, self.sha)
 
 class ImageConfirm(RequestBase):
     def __init__(self):
@@ -410,6 +412,9 @@ class ImageUpload(RequestBase):
             dec_msg = CborAttr.decode(rsp[hdr.size:])[0]
             if CmdBase._debug:
                 print(dec_msg)
+        else:
+            # transport should handle this case
+            raise ValueError('Complete header w/o payload: {}'.format(hdr))
 
         err = MgmtErr.from_response(dec_msg)
         if err:
@@ -428,6 +433,8 @@ class ImageUpload(RequestBase):
         self.response_data = ResponseBase(err, dec_msg, None)
         return self.response_data
 
+    def __str__(self):
+        return '{}(image=MCUBootImage(version={},hash={}))'.format(self.__class__.__name__, self.image.version, self.sha)
 
 def _image_hash(val):
     if isinstance(val, str):

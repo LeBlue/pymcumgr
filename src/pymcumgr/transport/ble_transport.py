@@ -161,13 +161,15 @@ class TransportBLE(object):
         if not mcumgr_char.obj:
             print('Device {} does not support mcumgr characteristic'.format(self.peer_id), file=sys.stderr)
             sys.exit(1)
-        else:
-            print(mcumgr_char.obj)
+        elif self.debug:
+            print('Found mcumgr characteristic at', mcumgr_char.obj)
+
         mcumgr_char.onValueChanged(mcumgr_char_rsp, transport=self)
         mcumgr_char.notifyOn()
 
         self.seq += 1
-        print('seq:', self.seq)
+        if self.debug:
+            print('seq:', self.seq)
         cmd = request.message()
 
         cmd_enc = cmd.encode(self.seq)

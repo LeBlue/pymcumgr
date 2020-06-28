@@ -209,6 +209,9 @@ class RequestBase(object):
         '''
         raise NotImplementedError('Must be provided by subclass')
 
+    def __str__(self):
+        return '{}()'.format(self.__class__.__name__)
+
 class CmdBase(object):
 
     _group = None

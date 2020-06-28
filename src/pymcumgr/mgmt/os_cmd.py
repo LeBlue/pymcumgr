@@ -67,6 +67,9 @@ class Echo(RequestBase):
 
         return self.response_data
 
+    def __str__(self):
+        return '{}(text={})'.format(self.__class__.__name__, self.text)
+
 class Reset(RequestBase):
 
     def message(self):
