@@ -32,6 +32,8 @@ class SlotDescription(object):
         except KeyError as e:
             raise KeyError('key expected in slot: {}'.format(str(e))) from None
 
+    def hash_str(self):
+        return self.hash
 
     def __str__(self):
         flags = ','.join([

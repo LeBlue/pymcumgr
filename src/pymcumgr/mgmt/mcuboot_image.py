@@ -102,14 +102,13 @@ class MCUBootImage(object):
 
             self.tlv_hdrs.append((tlv_hdr, tlv_hdr_bytes))
 
-
+    @property
     def version(self):
         return self.header.version()
 
 
     def hash_str(self):
         return ''.join('{:02x}'.format(b) for b in self.hash())
-
 
     def hash(self):
         b = b''
@@ -157,7 +156,7 @@ def main():
         print_hex(tlv_hdr[1])
 
 
-    print('version:{} hash:{}'.format(mcuboot_img.version(), mcuboot_img.hash_str()))
+    print('version:{} hash:{}'.format(mcuboot_img.version, mcuboot_img.hash_str()))
 
 
 if __name__ == '__main__':
