@@ -194,9 +194,9 @@ class TransportBLE(object):
             raise e from None
 
         try:
-            mcumgr_char.notifyOff()
             mcumgr_char.onValueChanged(None)
-        except BluezError:
+            mcumgr_char.notifyOff()
+        except (BluezError, GLib.Error):
             pass
 
         # if self.response:
