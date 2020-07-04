@@ -118,7 +118,11 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
                 print(next_msg.hdr)
                 print(next_msg.payload_dict)
             transport.timeout.start()
-            transport.gatt.mcumgr_service.mcumgr_char.write(cmd_enc)
+            try:
+                transport.gatt.mcumgr_service.mcumgr_char.write(cmd_enc)
+            except BluezError as e:
+                transport.response = e
+                transport.loop.quit()
         else:
             transport.loop.quit()
 
