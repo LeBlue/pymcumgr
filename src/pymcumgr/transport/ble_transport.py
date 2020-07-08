@@ -50,7 +50,28 @@ class GattMcumgr(Gatt):
         super().__init__(d, GATT_MCUMGR, warn_unmatched=False)
 
 
+# TODO does this work as method?
+def mcumgr_char_req(transport):
+    next_msg = transport.request.message()
 
+    if next_msg:
+        transport.seq = (transport.seq + 1) % 256
+        cmd_enc = next_msg.encode(transport.seq)
+
+        # encode will set leng and seq, print afterwards
+        if transport.debug:
+            print(next_msg.hdr)
+            print(next_msg.payload_dict)
+        transport.timeout.start()
+        try:
+            transport.gatt.mcumgr_service.mcumgr_char.write(cmd_enc)
+        except BluezError as e:
+            transport.response = e
+            transport.loop.quit()
+    else:
+        transport.loop.quit()
+
+    return False
 
 # TODO does this work as method?
 def mcumgr_char_rsp(char, changed_vals, transport=None):
@@ -88,13 +109,16 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
 
         pkt_data = transport.fragment
         pkt_seq = transport.seq
-        transport.seq = (transport.seq + 1) % 256
         transport.fragment = None
 
         # check duplicates
         if pkt_seq > cmd_rsp.hdr.seq:
             #ignore for now, this resonse already timed out and we made a new request.
-            print('Transport: Got duplicate: ', str(cmd_rsp.hdr), file=sys.stderr)
+            print('Transport: Got duplicate: ', str(cmd_rsp.hdr), "expected seq:", pkt_seq, file=sys.stderr)
+            return
+        elif pkt_seq < cmd_rsp.hdr.seq:
+            #ignore for now, this resonse already timed out and we made a new request.
+            print('Transport: Got duplicate: ', str(cmd_rsp.hdr), "expected seq:", pkt_seq, file=sys.stderr)
             return
 
         transport.response = transport.request.parse_response(pkt_data)
@@ -109,22 +133,8 @@ def mcumgr_char_rsp(char, changed_vals, transport=None):
         if transport.debug:
             print(transport.response.obj)
 
-        next_msg = transport.request.message()
-        if next_msg:
-            cmd_enc = next_msg.encode(transport.seq)
+        mcumgr_char_req(transport)
 
-            # encode will set leng and seq, print afterwards
-            if transport.debug:
-                print(next_msg.hdr)
-                print(next_msg.payload_dict)
-            transport.timeout.start()
-            try:
-                transport.gatt.mcumgr_service.mcumgr_char.write(cmd_enc)
-            except BluezError as e:
-                transport.response = e
-                transport.loop.quit()
-        else:
-            transport.loop.quit()
 
     # catch all and save object for reraising from main context
     except Exception as e:
@@ -177,19 +187,8 @@ class TransportBLE(object):
         mcumgr_char.onValueChanged(mcumgr_char_rsp, transport=self)
         mcumgr_char.notifyOn()
 
-        self.seq += 1
-        if self.debug:
-            print('seq:', self.seq)
-        cmd = request.message()
 
-        cmd_enc = cmd.encode(self.seq)
-        # encode will set leng and seq, print afterwards
-        if self.debug:
-            print(cmd.hdr)
-            print(cmd.payload_dict)
-
-        GLib.timeout_add_seconds(0, self.gatt.mcumgr_service.mcumgr_char.write, cmd_enc)
-        self.timeout.start()
+        GLib.timeout_add_seconds(0, mcumgr_char_req, self)
         try:
             self.loop.run()
             self.timeout.cancel()
@@ -212,7 +211,9 @@ class TransportBLE(object):
 
         # raise / return Error, maybe not the best, but will do for now
         if self.response and isinstance(self.response, Exception):
-            raise self.response # pylint: disable=raising-bad-type,
+            #raise self.response # pylint: disable=raising-bad-type,
+            print('Error:', str(self.response), file=sys.stderr)
+            return None
 
         return self.response
 
