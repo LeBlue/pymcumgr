@@ -405,7 +405,7 @@ class ImageUpload(RequestBase):
                 elapsed = (et - self.starttime)
                 speed = (self.len - self._progress_init_offset) / elapsed
                 print('{} / {} (100%)'.format(len(self.image.data), len(self.image.data)))
-                print('{}s ({:3.1f} kb/s)'.format(int(elapsed), speed/1024))
+                print('{}s ({:3.1f} kb/s)'.format(int(elapsed), speed/1024), flush=True)
             return None
 
         # should not completely restart (in case MTU is to small to include first data)
@@ -459,7 +459,7 @@ class ImageUpload(RequestBase):
             # prevent exessive printing
             if percent - self._progress_last >= 1:
                 self._progress_last = percent
-                print('{} / {} ({}%)'.format(self.current_offset, len(self.image.data), percent))
+                print('{} / {} ({}%)'.format(self.current_offset, len(self.image.data), percent), flush=True)
 
         self.response_data = ResponseBase(err, dec_msg, None)
         return self.response_data
