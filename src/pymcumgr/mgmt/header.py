@@ -2,6 +2,9 @@
 from enum import Enum
 import sys
 
+import cbor
+
+
 '''
 /** Opcodes; encoded in first byte of header. */
 #define MGMT_OP_READ            0
@@ -175,7 +178,6 @@ class MgmtHeader(object):
         return '{}(op:{} group:{} id:{} len:{} seq:{} flags:{})'.format(self.__class__.__name__,
             self.op, self.group, self.id, self.length, self.seq, self.flags)
 
-from .cborattr import CborAttr
 
 class RequestBase(object):
     '''object keeps state of request'''
@@ -238,7 +240,7 @@ class CmdBase(object):
         '''encodes self.payload_dict and header
         returns both as bytes
         '''
-        self.payload_bytes = CborAttr.encode(self.payload_dict)
+        self.payload_bytes = cbor.dumps(self.payload_dict)
 
         self.hdr.seq = seq
         self.hdr.length = len(self.payload_bytes)
@@ -248,7 +250,7 @@ class CmdBase(object):
     def decode(self):
         if len(self.payload_bytes) < self.hdr.length:
             raise ValueError('Too few payload bytes: {} got: {}'.format(str(self.hdr), len(self.payload_bytes)))
-        self.payload_dict = CborAttr.decode(self.payload_bytes)[0]
+        self.payload_dict = cbor.loads(self.payload_bytes)
 
         return self.payload_dict
 

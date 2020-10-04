@@ -1,6 +1,6 @@
 import pytest
-from pymcumgr.mgmt.cborattr import CborAttr
 
+import cbor
 
 _values = [
     ({},
@@ -31,7 +31,7 @@ _values = [
     _values
 )
 def test_encode(py_map, bin_value):
-    map_enc = CborAttr.encode(py_map)
+    map_enc = cbor.dumps(py_map)
 
     assert map_enc == bin_value
 
@@ -41,9 +41,9 @@ def test_encode(py_map, bin_value):
 )
 @pytest.mark.timeout(timeout=5)
 def test_decode(py_map, bin_value):
-    map_dec = CborAttr.decode(bin_value)
+    map_dec = cbor.loads(bin_value)
 
     assert map_dec is not None
-    assert len(map_dec) != 0
-    assert type(map_dec[0]) == type(py_map)
-    assert map_dec[0] == py_map
+    # assert len(map_dec) != 0
+    assert type(map_dec) == type(py_map), f"dec: {map_dec}"
+    assert map_dec == py_map

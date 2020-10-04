@@ -1,7 +1,8 @@
 from enum import Enum
 
 from .header import MgmtHeader, MgmtGroup, MgmtOp, MgmtErr, CmdBase, RequestBase, ResponseBase
-from .cborattr import CborAttr
+
+import cbor
 
 class MgmtIdOS(Enum):
     ECHO           = 0
@@ -57,7 +58,7 @@ class Echo(RequestBase):
         # if len(rsp) > hdr.size:
         #     raise ValueError('Echo command response to short: {}'.format(str(hdr)))
 
-        dec_msg = CborAttr.decode(rsp[hdr.size:])[0]
+        dec_msg = cbor.loads(rsp[hdr.size:])
         if self.__class__._debug:
             print(dec_msg)
         if not 'r' in dec_msg:
@@ -87,7 +88,7 @@ class Reset(RequestBase):
         #     raise ValueError('Reset command response to short: {}'.format(str(hdr)))
 
 
-        dec_msg = CborAttr.decode(rsp[hdr.size:])[0]
+        dec_msg = cbor.loads(rsp[hdr.size:])
         if self.__class__._debug:
             print(dec_msg)
 

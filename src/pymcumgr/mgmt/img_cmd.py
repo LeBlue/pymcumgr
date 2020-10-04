@@ -1,6 +1,7 @@
 from enum import Enum
 from .header import MgmtHeader, MgmtGroup, MgmtOp, MgmtErr, CmdBase, RequestBase, ResponseBase
-from .cborattr import CborAttr
+
+import cbor
 
 import time
 import sys
@@ -424,7 +425,7 @@ class ImageUpload(RequestBase):
             raise ValueError('Unexpected response: {}'.format(hdr))
 
         if len(rsp) > hdr.size:
-            dec_msg = CborAttr.decode(rsp[hdr.size:])[0]
+            dec_msg = cbor.loads(rsp[hdr.size:])
             if CmdBase._debug:
                 print(dec_msg)
         else:

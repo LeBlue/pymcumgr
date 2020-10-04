@@ -36,7 +36,7 @@ setup(
    url='pymcumgr.somewhere',
    install_requires=[
       'pydbusbluez',
-      'pytinycbor',
+      'cbor==1.0.0',
    ], #external packages as dependencies
    license='MIT',
    classifiers=[
