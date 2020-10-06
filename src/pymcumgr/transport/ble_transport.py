@@ -56,7 +56,11 @@ def mcumgr_char_req(transport):
 
     if next_msg:
         transport.seq = (transport.seq + 1) % 256
-        cmd_enc = next_msg.encode(transport.seq)
+        try:
+            cmd_enc = next_msg.encode(transport.seq)
+        except Exception as ex:
+            transport.loop.quit()
+            transport.response = ex
 
         # encode will set leng and seq, print afterwards
         if transport.debug:
