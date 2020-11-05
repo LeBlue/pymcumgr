@@ -57,13 +57,13 @@ class MgmtGroup(Enum):
         while self.value >= len(_registered_groups):
             _registered_groups.append(None)
 
-        _registered_groups[self.value] = id_enum
+        _registered_groups[self.value] = id_enum  # pylint: disable=invalid-sequence-index
 
     def getId(self, nh_id):
         if len(_registered_groups) <= self.value:
             return None
 
-        return _registered_groups[self.value](nh_id)
+        return _registered_groups[self.value](nh_id)  # pylint: disable=invalid-sequence-index
 
 
 
