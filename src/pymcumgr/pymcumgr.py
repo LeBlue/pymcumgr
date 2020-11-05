@@ -114,7 +114,7 @@ def main():
                 print(rsp)
             if rsp:
                 if rsp.err:
-                    print(str(err))
+                    print(str(rsp.err))
                 elif rsp.obj:
                     for idx, sl in enumerate(rsp.obj.slots):
                         print('image:{} {}'.format(idx, str(sl)))
@@ -127,7 +127,7 @@ def main():
                 print(rsp)
             if rsp:
                 if rsp.err:
-                    print(str(err))
+                    print(str(rsp.err))
                 elif rsp.obj:
                     for idx, sl in enumerate(rsp.obj.slots):
                         print('image:{} {}'.format(idx, str(sl)))
@@ -140,7 +140,7 @@ def main():
                 print(rsp)
             if rsp:
                 if rsp.err:
-                    print(str(err))
+                    print(str(rsp.err))
                 elif rsp.obj:
                     for idx, sl in enumerate(rsp.obj.slots):
                         print('image:{} {}'.format(idx, str(sl)))
