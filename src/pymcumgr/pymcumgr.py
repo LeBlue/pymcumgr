@@ -7,11 +7,11 @@ from pymcumgr.mgmt.img_cmd import ImgDescription, registerImageCommandArguments,
 from pymcumgr.mgmt.header import MgmtHeader, MgmtOp, MgmtGroup, MgmtErr
 from pymcumgr.mgmt.mcuboot_image import MCUBootImage, print_hex as print_hex2
 
-from pymcumgr.transport.ble_transport import TransportBLE
+from pymcumgr.transport import Transport, TransportBLE
 
 
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 
 _usage='''
   %(prog)s [options]'''
@@ -26,25 +26,12 @@ def cmd_finished(transport, err, response):
         print(response)
     transport.close()
 
-def parse_connstring(args):
-    try:
-        ct = args.conntype
-    except AttributeError:
-        ct = 'ble'
 
-    if ct == 'ble':
-        if not args.connstring:
-            return args
+def conntype(arg):
+    if not arg in Transport.transport_types():
+        raise ArgumentTypeError(f'Supported conntypes: {Transport.transport_types()}')
 
-        args.connstring = TransportBLE.fromCmdArgs(args)
-    else:
-        raise ValueError('Supported conntypes: [\'ble\']')
-
-    return args
-
-
-
-
+    return arg
 
 
 def main():
@@ -60,7 +47,7 @@ def main():
                         help='Connection key-value pairs to use instead of using the profile\'s connstring'
     )
     #only ble for now, set as default
-    parser.add_argument('--conntype', metavar='string', type=str, default='ble',
+    parser.add_argument('--conntype', metavar='string', type=conntype, default=TransportBLE.conntype(),
                         help='Connection type to use instead of using the profile\'s type'
     )
     parser.add_argument('-i', '--hci', metavar='int', type=int, default=0,
@@ -99,8 +86,12 @@ def main():
             print(img)
             sys.exit(0)
 
+    try:
+        transport = Transport.fromCmdArgs(args)
+    except ValueError as ex:
+        print(str(ex))
+        sys.exit(2)
 
-    transport = TransportBLE.fromCmdArgs(args)
     transport.set_timeout(args.timeout)
     transport.debug = debug
 

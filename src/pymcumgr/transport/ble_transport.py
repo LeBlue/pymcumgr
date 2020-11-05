@@ -150,6 +150,10 @@ class TransportBLE(object):
 
     _valid_cs_attrs = ['peer_id']
 
+    @staticmethod
+    def conntype():
+        return 'ble'
+
     def __init__(self, timeout=10, adapter=0, peer_id=None, peer_name=None):
         self.peer_id = peer_id.upper()
         self.peer_name = peer_name

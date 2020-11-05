@@ -36,16 +36,23 @@ class CmdTimeout(object):
 
 class Transport(object):
 
-    _valid_transports = ['ble']
+    _registered = {}
 
-    @staticmethod
-    def fromCmdArgs(args):
-        if not args.conntype or not args.conntype in Transport._valid_transports:
+    @classmethod
+    def fromCmdArgs(cls, args):
+        if not args.conntype or not args.conntype in cls._registered:
             raise ValueError(
                 'Missing or unknown conntype, supported: {}'.format(
-                    Transport._valid_transports)
+                    list(cls._registered))
                 )
-        if args.conntype == 'ble':
-            return TransportBLE.fromCmdArgs(args)
+
+        return cls._registered[args.conntype].fromCmdArgs(args)
 
 
+    @classmethod
+    def register(cls, trsp):
+        cls._registered[trsp.conntype()] = trsp
+
+    @classmethod
+    def transport_types(cls):
+        return list(cls._registered)
