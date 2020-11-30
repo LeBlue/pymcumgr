@@ -440,13 +440,14 @@ class ImageUpload(RequestBase):
         if not 'off' in dec_msg:
             raise ValueError('Missing key \'off\' in response')
 
-        if dec_msg['off'] != self.next_offset:
+        # account for aligned data requests
+        if dec_msg['off'] != self.next_offset and dec_msg['off'] != (self.next_offset - (self.next_offset % 4)):
             if dec_msg['off'] < self.next_offset:
                 if self.retry_offset >= 0:
-                    print('Missed a packet, resending offset:', dec_msg['off'], file=sys.stderr)
+                    print('Missed a packet, resending offset:', dec_msg['off'], 'expected:', self.next_offset, file=sys.stderr)
                     self.retry_offset -= 1
                 else:
-                    raise ValueError("Exeeded retries on resend, off:", dec_msg['off'])
+                    raise ValueError("Exeeded retries on resend, off:", dec_msg['off'], 'expected:', self.next_offset)
             else:
                 print('Upload continue ...')
                 self._progress_init_offset = dec_msg['off']
